@@ -1,0 +1,15 @@
+# This file contains the analysis options for Dart, including linting rules.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    - avoid_print
+    - prefer_const_constructors
+    - unnecessary_new
+    - prefer_final_fields
+    - always_specify_types
+    - public_member_api_docs
+    - lines_longer_than_80_chars
+    - type_annotate_public_apis
+    - prefer_single_quotes
+    - unnecessary_this

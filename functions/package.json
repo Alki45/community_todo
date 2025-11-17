@@ -1,0 +1,26 @@
+{
+  "name": "quran-recitation-functions",
+  "description": "Cloud Functions for Qur'an Recitation Tracker",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm run lint",
+    "lint": "eslint .",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.13.0",
+    "eslint-config-google": "^0.14.0"
+  }
+}
+
+
+
+
+

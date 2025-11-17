@@ -1,0 +1,42 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "qurantodo",
+          "appId": "<REDACTED_ANDROID_APP_ID>",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "qurantodo",
+          "configurations": {
+            "android": "<REDACTED_ANDROID_APP_ID>",
+            "ios": "<REDACTED_IOS_APP_ID>",
+            "macos": "<REDACTED_MACOS_APP_ID>",
+            "web": "<REDACTED_WEB_APP_ID>"
+          }
+        }
+      }
+    }
+  },
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    }
+  }
+}
