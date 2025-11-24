@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,10 +12,12 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'providers/quran_provider.dart';
 import 'providers/user_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/verify_email_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 import 'services/notification_service.dart';
@@ -22,25 +25,61 @@ import 'services/quran_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (!_isLinuxDesktop) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  }
 }
 
 const bool _useFirebaseEmulators =
     bool.fromEnvironment('USE_FIREBASE_EMULATORS', defaultValue: false);
 
+bool get _isLinuxDesktop {
+  if (kIsWeb) return false;
+  try {
+    return Platform.isLinux;
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  if (_useFirebaseEmulators) {
-    await _connectToFirebaseEmulators();
+  
+  // Only initialize Firebase if not on Linux desktop
+  // On Linux, use Firebase emulators if USE_FIREBASE_EMULATORS is set
+  if (!_isLinuxDesktop) {
+    try {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    } catch (e) {
+      debugPrint('Firebase initialization failed: $e');
+      // Continue without Firebase for development
+    }
+  } else if (_useFirebaseEmulators) {
+    // For Linux, try to initialize with emulators
+    try {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      await _connectToFirebaseEmulators();
+    } catch (e) {
+      debugPrint('Firebase emulator initialization failed: $e');
+      // Continue without Firebase for development
+    }
   }
 
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-  );
+  if (!_isLinuxDesktop || _useFirebaseEmulators) {
+    try {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+      );
+    } catch (e) {
+      debugPrint('Firestore settings failed: $e');
+    }
 
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    try {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    } catch (e) {
+      debugPrint('Firebase Messaging setup failed: $e');
+    }
+  }
 
   final notificationService = NotificationService();
   await notificationService.init();
@@ -50,16 +89,20 @@ Future<void> main() async {
 
 Future<void> _connectToFirebaseEmulators() async {
   const host = '127.0.0.1';
-  if (kIsWeb) {
-    FirebaseFirestore.instance.settings = const Settings(
-      host: '$host:8080',
-      sslEnabled: false,
-      persistenceEnabled: false,
-    );
-  } else {
-    FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
+  try {
+    if (kIsWeb) {
+      FirebaseFirestore.instance.settings = const Settings(
+        host: '$host:8080',
+        sslEnabled: false,
+        persistenceEnabled: false,
+      );
+    } else {
+      FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
+    }
+    await FirebaseAuth.instance.useAuthEmulator(host, 9099);
+  } catch (e) {
+    debugPrint('Failed to connect to Firebase emulators: $e');
   }
-  await FirebaseAuth.instance.useAuthEmulator(host, 9099);
 }
 
 class MyApp extends StatelessWidget {
@@ -71,6 +114,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         Provider<AuthService>(create: (_) => AuthService()),
         Provider<FirestoreService>(create: (_) => FirestoreService()),
         Provider<NotificationService>.value(value: notificationService),
@@ -103,15 +147,19 @@ class MyApp extends StatelessWidget {
                 ),
         ),
       ],
-      child: MaterialApp(
-        title: 'Qur\'an Tracker',
-        themeMode: ThemeMode.light,
-        debugShowCheckedModeBanner: false,
-        theme: _buildTheme(Brightness.light),
-        darkTheme: _buildTheme(Brightness.dark),
-        home: const AuthGate(),
-        routes: {
-          RegisterScreen.routeName: (_) => const RegisterScreen(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            title: 'Qur\'an Tracker',
+            themeMode: themeProvider.themeMode,
+            debugShowCheckedModeBanner: false,
+            theme: _buildTheme(Brightness.light),
+            darkTheme: _buildTheme(Brightness.dark),
+            home: const AuthGate(),
+            routes: {
+              RegisterScreen.routeName: (_) => const RegisterScreen(),
+            },
+          );
         },
       ),
     );
@@ -127,28 +175,47 @@ ThemeData _buildTheme(Brightness brightness) {
     useMaterial3: true,
   );
 
+  final scaffoldBg = brightness == Brightness.dark 
+      ? const Color(0xFF121212)
+      : const Color(0xFFFAFAFA);
+  final textColor = brightness == Brightness.dark
+      ? Colors.white
+      : const Color(0xFF1A1A1A);
+  final secondaryTextColor = brightness == Brightness.dark
+      ? Colors.white70
+      : const Color(0xFF666666);
+
   return base.copyWith(
-    scaffoldBackgroundColor: Colors.white,
+    scaffoldBackgroundColor: scaffoldBg,
     appBarTheme: AppBarTheme(
       elevation: 0,
       centerTitle: false,
       backgroundColor: Colors.transparent,
-      foregroundColor: brightness == Brightness.dark
-          ? Colors.white
-          : Colors.black87,
+      foregroundColor: textColor,
       titleTextStyle: base.textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w700,
+        color: textColor,
       ),
     ),
+    textTheme: base.textTheme.apply(
+      fontFamily: 'Roboto',
+      bodyColor: textColor,
+      displayColor: textColor,
+    ),
     cardTheme: CardThemeData(
-      color: base.colorScheme.surface,
+      color: brightness == Brightness.dark 
+          ? const Color(0xFF1E1E1E)
+          : Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      elevation: brightness == Brightness.dark ? 2 : 1,
     ),
     chipTheme: base.chipTheme.copyWith(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      labelStyle: TextStyle(
+        fontWeight: FontWeight.w600,
+        color: textColor,
+      ),
     ),
-    textTheme: base.textTheme.apply(fontFamily: 'Roboto'),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: base.colorScheme.primary,
       foregroundColor: base.colorScheme.onPrimary,
@@ -156,13 +223,30 @@ ThemeData _buildTheme(Brightness brightness) {
   );
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _showSplash = true;
 
   @override
   Widget build(BuildContext context) {
     final authService = context.read<AuthService>();
     final userProvider = context.read<UserProvider>();
+
+    if (_showSplash) {
+      return SplashScreen(
+        onComplete: () {
+          setState(() {
+            _showSplash = false;
+          });
+        },
+      );
+    }
 
     return StreamBuilder<User?>(
       stream: authService.authStateChanges,

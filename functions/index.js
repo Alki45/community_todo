@@ -99,7 +99,7 @@ exports.onRecitationStatusUpdate = functions.firestore
 
     const notification = {
       title: 'Recitation progress update',
-      body: `${after.assigned_to_name || 'A member'} marked ${after.surah} as ${after.status}.`,
+      body: `${after.assigned_to_name || 'A member'} marked ${after.surah || 'Juz ' + after.juz_number} as ${after.status}.`,
     };
 
     const dataPayload = {
@@ -118,18 +118,70 @@ exports.onRecitationStatusUpdate = functions.firestore
     ];
 
     if (after.status === 'completed') {
-      const tokens = await getUserDeviceTokens(after.assigned_by);
-      if (tokens.length > 0) {
+      // Notify the admin who assigned it
+      const adminTokens = await getUserDeviceTokens(after.assigned_by);
+      if (adminTokens.length > 0) {
         sends.push(
           messaging.sendEachForMulticast({
-            tokens,
+            tokens: adminTokens,
             notification: {
               title: 'Assignment completed',
-              body: `${after.assigned_to_name || 'Your member'} completed ${after.surah}.`,
+              body: `${after.assigned_to_name || 'A member'} completed ${after.surah || 'Juz ' + after.juz_number}.`,
             },
             data: dataPayload,
           }),
         );
+      }
+
+      // Announce to all group members via topic
+      sends.push(
+        messaging.send({
+          topic: `group_${after.group_id}`,
+          notification: {
+            title: '🎉 Recitation Completed!',
+            body: `${after.assigned_to_name || 'A member'} has completed ${after.surah || 'Juz ' + after.juz_number}. MashaAllah!`,
+          },
+          data: {
+            ...dataPayload,
+            action: 'recitation_completed',
+            memberName: after.assigned_to_name,
+            juzNumber: after.juz_number?.toString() || '',
+          },
+        }),
+      );
+
+      // Check if all 30 Juz are completed for this week
+      if (after.week_id) {
+        const weekAssignments = await db.collection('recitations')
+          .where('group_id', '==', after.group_id)
+          .where('week_id', '==', after.week_id)
+          .get();
+
+        const completedJuz = new Set();
+        weekAssignments.docs.forEach((doc) => {
+          const data = doc.data();
+          if (data.status === 'completed') {
+            completedJuz.add(data.juz_number);
+          }
+        });
+
+        if (completedJuz.size === 30) {
+          // All 30 Juz completed! Send celebration notification
+          sends.push(
+            messaging.send({
+              topic: `group_${after.group_id}`,
+              notification: {
+                title: '🎉 Quran Completed!',
+                body: 'Your team has successfully completed the Quran. Make duas.',
+              },
+              data: {
+                ...dataPayload,
+                action: 'quran_completed',
+                weekId: after.week_id,
+              },
+            }),
+          );
+        }
       }
     }
 
@@ -303,6 +355,91 @@ exports.onJoinRequestUpdated = functions.firestore
 
     return null;
   });
+
+// Weekly auto-reset: Runs every Monday at 00:00 UTC
+exports.weeklyAutoReset = functions.pubsub
+  .schedule('0 0 * * 1') // Every Monday at midnight UTC
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    functions.logger.info('Weekly auto-reset triggered');
+
+    try {
+      // Get all groups
+      const groupsSnapshot = await db.collection('groups').get();
+      const groups = groupsSnapshot.docs;
+
+      for (const groupDoc of groups) {
+        const group = groupDoc.data();
+        const groupId = groupDoc.id;
+
+        // Get current week assignments
+        const now = new Date();
+        const weekStart = getWeekStart(now);
+        const weekId = generateWeekId(weekStart);
+
+        // Check if assignments already exist for this week
+        const existingAssignments = await db.collection('recitations')
+          .where('group_id', '==', groupId)
+          .where('week_id', '==', weekId)
+          .limit(1)
+          .get();
+
+        if (existingAssignments.empty && group.member_ids && group.member_ids.length > 0) {
+          // Auto-assign weekly Juz if admin exists
+          const adminUid = group.admin_uid;
+          if (adminUid) {
+            const adminMember = group.members?.find((m) => m.uid === adminUid);
+            if (adminMember) {
+              // This would require the WeeklyAssignmentService logic
+              // For now, we'll just notify admins to create assignments
+              const adminTokens = await getUserDeviceTokens(adminUid);
+              if (adminTokens.length > 0) {
+                await messaging.sendEachForMulticast({
+                  tokens: adminTokens,
+                  notification: {
+                    title: 'New week started',
+                    body: `It's a new week! Assign weekly Juz for ${group.name}.`,
+                  },
+                  data: {
+                    groupId: groupId,
+                    action: 'weekly_reset',
+                    weekId: weekId,
+                  },
+                });
+              }
+            }
+          }
+        }
+      }
+
+      functions.logger.info(`Weekly auto-reset completed for ${groups.length} groups`);
+      return null;
+    } catch (error) {
+      functions.logger.error('Weekly auto-reset failed:', error);
+      throw error;
+    }
+  });
+
+// Helper functions for week calculation
+function getWeekStart(date) {
+  const weekday = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const diff = date.getDate() - weekday + (weekday === 0 ? -6 : 1); // Adjust to Monday
+  return new Date(date.setDate(diff));
+}
+
+function generateWeekId(weekStart) {
+  const year = weekStart.getFullYear();
+  const weekNumber = getWeekNumber(weekStart);
+  return `${year}-W${weekNumber}`;
+}
+
+function getWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
 
 const resolveSeedToken = () => {
   const fromConfig = functions.config().seed?.token;

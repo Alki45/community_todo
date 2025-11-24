@@ -14,6 +14,8 @@ class Group {
     this.shareableLink,
     this.requiresApproval = false,
     this.adminVotes = const {},
+    this.weekNumber,
+    this.currentWeekId,
   });
 
   final String id;
@@ -28,6 +30,8 @@ class Group {
   final String? description;
   final bool requiresApproval;
   final Map<String, List<String>> adminVotes;
+  final int? weekNumber; // Sequential week number (1, 2, 3...)
+  final String? currentWeekId; // Current week ID
 
   bool get hasDescription => (description ?? '').trim().isNotEmpty;
   int get memberCount => members.length;
@@ -44,6 +48,8 @@ class Group {
     String? description,
     bool? requiresApproval,
     Map<String, List<String>>? adminVotes,
+    int? weekNumber,
+    String? currentWeekId,
   }) {
     return Group(
       id: id,
@@ -58,6 +64,8 @@ class Group {
       description: description ?? this.description,
       requiresApproval: requiresApproval ?? this.requiresApproval,
       adminVotes: adminVotes ?? this.adminVotes,
+      weekNumber: weekNumber ?? this.weekNumber,
+      currentWeekId: currentWeekId ?? this.currentWeekId,
     );
   }
 
@@ -84,6 +92,8 @@ class Group {
       adminVotes: (data['admin_votes'] as Map<String, dynamic>? ?? {}).map(
         (key, value) => MapEntry(key, (value as List<dynamic>).cast<String>()),
       ),
+      weekNumber: data['week_number'] as int?,
+      currentWeekId: data['current_week_id'] as String?,
     );
   }
 
@@ -100,6 +110,8 @@ class Group {
       'requires_approval': requiresApproval,
       if (description != null) 'description': description,
       'admin_votes': adminVotes,
+      if (weekNumber != null) 'week_number': weekNumber,
+      if (currentWeekId != null) 'current_week_id': currentWeekId,
     };
   }
 }

@@ -1,0 +1,44 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is a group member
+    function isGroupMember(groupId) {
+      return isAuthenticated() &&
+             exists(/databases/(default)/documents/groups/$(groupId)) &&
+             request.auth.uid in get(/databases/(default)/documents/groups/$(groupId)).data.member_ids;
+    }
+    
+    // Groups folder - for group-related files (announcements, chat, etc.)
+    match /groups/{groupId}/{folder}/{userId}/{fileName} {
+      // Allow read if user is authenticated and is a group member
+      allow read: if isAuthenticated() && isGroupMember(groupId);
+      
+      // Allow write (upload) if:
+      // 1. User is authenticated
+      // 2. User is a group member
+      // 3. User is uploading to their own folder (userId matches auth.uid)
+      allow write: if isAuthenticated() && 
+                     isGroupMember(groupId) &&
+                     userId == request.auth.uid &&
+                     request.resource.size < 10 * 1024 * 1024; // 10MB limit
+      
+      // Allow delete if user is the owner or group admin
+      allow delete: if isAuthenticated() && 
+                      (userId == request.auth.uid ||
+                       request.auth.uid == get(/databases/(default)/documents/groups/$(groupId)).data.admin_uid);
+    }
+    
+    // Default rule: deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+
+

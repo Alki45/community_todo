@@ -16,6 +16,9 @@ class RecitationAssignment {
     required this.assignedDate,
     this.deadline,
     this.completedDate,
+    this.weekId,
+    this.weekStartDate,
+    this.weekEndDate,
   });
 
   final String id;
@@ -32,6 +35,9 @@ class RecitationAssignment {
   final DateTime assignedDate;
   final DateTime? deadline;
   final DateTime? completedDate;
+  final String? weekId;
+  final DateTime? weekStartDate;
+  final DateTime? weekEndDate;
 
   bool get isCompleted => status == 'completed';
   bool get isPastDue =>
@@ -39,7 +45,13 @@ class RecitationAssignment {
       !isCompleted &&
       DateTime.now().isAfter(deadline!.add(const Duration(days: 1)));
 
-  RecitationAssignment copyWith({String? status, DateTime? completedDate}) {
+  RecitationAssignment copyWith({
+    String? status,
+    DateTime? completedDate,
+    String? weekId,
+    DateTime? weekStartDate,
+    DateTime? weekEndDate,
+  }) {
     return RecitationAssignment(
       id: id,
       groupId: groupId,
@@ -55,6 +67,9 @@ class RecitationAssignment {
       assignedDate: assignedDate,
       deadline: deadline,
       completedDate: completedDate ?? this.completedDate,
+      weekId: weekId ?? this.weekId,
+      weekStartDate: weekStartDate ?? this.weekStartDate,
+      weekEndDate: weekEndDate ?? this.weekEndDate,
     );
   }
 
@@ -79,6 +94,9 @@ class RecitationAssignment {
           DateTime.fromMillisecondsSinceEpoch(0),
       deadline: (data['deadline'] as Timestamp?)?.toDate(),
       completedDate: (data['completed_date'] as Timestamp?)?.toDate(),
+      weekId: data['week_id'] as String?,
+      weekStartDate: (data['week_start_date'] as Timestamp?)?.toDate(),
+      weekEndDate: (data['week_end_date'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -98,6 +116,11 @@ class RecitationAssignment {
       if (deadline != null) 'deadline': Timestamp.fromDate(deadline!),
       if (completedDate != null)
         'completed_date': Timestamp.fromDate(completedDate!),
+      if (weekId != null) 'week_id': weekId,
+      if (weekStartDate != null)
+        'week_start_date': Timestamp.fromDate(weekStartDate!),
+      if (weekEndDate != null)
+        'week_end_date': Timestamp.fromDate(weekEndDate!),
     };
   }
 }

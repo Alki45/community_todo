@@ -149,17 +149,22 @@ class _StatisticsTabState extends State<StatisticsTab> {
           if (providerActive != null &&
               groups.any((g) => g.id == providerActive)) {
             _selectedGroupId = providerActive;
-          } else {
+          } else if (groups.isNotEmpty) {
             _selectedGroupId = groups.first.id;
-            WidgetsBinding.instance.addPostFrameCallback(
-                (_) => userProvider.setActiveGroup(_selectedGroupId!));
+            final groupId = _selectedGroupId;
+            if (groupId != null) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => userProvider.setActiveGroup(groupId));
+            }
           }
         }
 
-        final Group? selectedGroup = _selectedGroupId == 'all'
+        final Group? selectedGroup = _selectedGroupId == 'all' || _selectedGroupId == null
             ? null
-            : groups.firstWhere((g) => g.id == _selectedGroupId,
-                orElse: () => groups.first);
+            : groups.firstWhere(
+                (g) => g.id == _selectedGroupId,
+                orElse: () => groups.isNotEmpty ? groups.first : throw StateError('No groups available'),
+              );
 
         final _AggregatedStatistics? aggregated = _selectedGroupId == 'all'
             ? (_groupStatsMap.values.isNotEmpty
@@ -167,21 +172,32 @@ class _StatisticsTabState extends State<StatisticsTab> {
                 : null)
             : null;
         final GroupStatistics? selectedStats =
-            (_selectedGroupId != 'all') ? _groupStatsMap[_selectedGroupId!] : null;
+            (_selectedGroupId != null && _selectedGroupId != 'all') 
+                ? _groupStatsMap[_selectedGroupId] 
+                : null;
 
+        final isSmallScreen = MediaQuery.of(context).size.height < 700;
         return ListView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.of(context).size.width > 600 ? 24 : 16,
+            vertical: isSmallScreen ? 16 : 24,
+          ),
           children: [
             Card(
               elevation: 0,
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Group statistics',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
+                    Text(
+                      'Group statistics',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: isSmallScreen ? 16 : null,
+                      ),
+                    ),
+                    SizedBox(height: isSmallScreen ? 8 : 12),
                     InputDecorator(
                       decoration: const InputDecoration(
                         labelText: 'Select group',
@@ -197,7 +213,12 @@ class _StatisticsTabState extends State<StatisticsTab> {
                                 value: 'all',
                                 child: Text('All groups (aggregated)')),
                             ...groups.map((group) => DropdownMenuItem(
-                                value: group.id, child: Text(group.name))),
+                                value: group.id,
+                                child: Text(
+                                  group.name,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ))),
                           ],
                           onChanged: (value) {
                             if (value != null) {
@@ -212,11 +233,11 @@ class _StatisticsTabState extends State<StatisticsTab> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isSmallScreen ? 12 : 16),
             Card(
               elevation: 0,
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
                 child: _selectedGroupId == 'all'
                     ? (aggregated == null
                         ? const Center(child: CircularProgressIndicator())
@@ -224,10 +245,12 @@ class _StatisticsTabState extends State<StatisticsTab> {
                             aggregated: aggregated,
                             groupsCount: groups.length,
                           ))
-                    : _PerGroupStatisticsView(
-                        group: selectedGroup!,
-                        statistics: selectedStats,
-                      ),
+                    : (selectedGroup != null
+                        ? _PerGroupStatisticsView(
+                            group: selectedGroup,
+                            statistics: selectedStats,
+                          )
+                        : const Center(child: Text('Please select a group'))),
               ),
             ),
           ],
@@ -252,51 +275,80 @@ class _AggregatedStatisticsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('All groups',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        Text('$groupsCount groups • Aggregated view',
-            style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 12),
+        Text(
+          'All groups',
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: isSmallScreen ? 18 : null,
+              ),
+        ),
+        SizedBox(height: isSmallScreen ? 4 : 6),
+        Text(
+          '$groupsCount groups • Aggregated view',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontSize: isSmallScreen ? 13 : null,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 8 : 12),
         Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Overall Progress'),
-                  Text('${(aggregated.completionRate * 100).toStringAsFixed(1)}% Complete',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  Text(
+                    'Overall Progress',
+                    style: TextStyle(fontSize: isSmallScreen ? 13 : null),
+                  ),
+                  Text(
+                    '${(aggregated.completionRate.clamp(0.0, 1.0) * 100).toStringAsFixed(1)}% Complete',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: colorScheme.primary)),
+                          color: colorScheme.primary,
+                          fontSize: isSmallScreen ? 18 : null,
+                        ),
+                  ),
                 ],
               ),
             ),
-            Text('${aggregated.completedAssignments}/${aggregated.totalAssignments}',
+            SizedBox(width: isSmallScreen ? 4 : 8),
+            Flexible(
+              child: Text(
+                '${aggregated.completedAssignments}/${aggregated.totalAssignments}',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+                    ?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: isSmallScreen ? 16 : null,
+                    ),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: isSmallScreen ? 8 : 12),
         LinearProgressIndicator(
           value: aggregated.completionRate.clamp(0.0, 1.0),
-          minHeight: 12,
+          minHeight: isSmallScreen ? 8 : 12,
           backgroundColor: colorScheme.surfaceContainerHighest,
           valueColor: AlwaysStoppedAnimation(colorScheme.primary),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: isSmallScreen ? 12 : 16),
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: isSmallScreen ? 8 : 12,
+          runSpacing: isSmallScreen ? 8 : 12,
           children: [
             _StatisticChip(
                 label: 'Total Assignments',
@@ -330,28 +382,44 @@ class _AggregatedStatisticsView extends StatelessWidget {
                 icon: Icons.percent),
           ],
         ),
-        const SizedBox(height: 20),
-        Text('Top members (aggregated)',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        SizedBox(height: isSmallScreen ? 16 : 20),
+        Text(
+          'Top members (aggregated)',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontSize: isSmallScreen ? 16 : null,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 4 : 8),
         if (aggregated.membersProgress.isEmpty)
           Card(
             elevation: 0,
             color: colorScheme.surfaceContainerHighest,
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 12),
-                  const Expanded(child: Text('No member assignments across groups yet.')),
+                  Icon(
+                    Icons.info_outline,
+                    color: colorScheme.onSurfaceVariant,
+                    size: isSmallScreen ? 20 : 24,
+                  ),
+                  SizedBox(width: isSmallScreen ? 8 : 12),
+                  Expanded(
+                    child: Text(
+                      'No member assignments across groups yet.',
+                      style: TextStyle(fontSize: isSmallScreen ? 13 : null),
+                    ),
+                  ),
                 ],
               ),
             ),
           )
         else
           ...aggregated.membersProgress.take(5).map(
-                (p) => _MemberProgressCard(progress: p, isTopPerformer: aggregated.membersProgress.indexOf(p) == 0),
+                (p) => _MemberProgressCard(
+                  progress: p,
+                  isTopPerformer: aggregated.membersProgress.indexOf(p) == 0,
+                ),
               ),
       ],
     );
@@ -379,30 +447,48 @@ class _StatisticChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     final backgroundColor = color ?? colorScheme.secondaryContainer;
 
     return Chip(
-      avatar: Icon(icon, size: 18, color: colorScheme.onSecondaryContainer),
+      avatar: Icon(
+        icon,
+        size: isSmallScreen ? 16 : 18,
+        color: colorScheme.onSecondaryContainer,
+      ),
       backgroundColor: backgroundColor,
-      labelPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      labelPadding: EdgeInsets.symmetric(
+        horizontal: isSmallScreen ? 8 : 12,
+        vertical: isSmallScreen ? 4 : 8,
+      ),
       label: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '$value${suffix ?? ''}',
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
+                ?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: isSmallScreen ? 14 : null,
+                ),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: isSmallScreen ? 1 : 2),
           Text(
             label,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
-                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                ?.copyWith(
+                  fontSize: isSmallScreen ? 10 : null,
+                  color: colorScheme.onSurfaceVariant,
+                ),
           ),
         ],
       ),
@@ -426,34 +512,54 @@ class _MemberProgressCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       color: isTopPerformer ? colorScheme.primaryContainer : null,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
         child: Row(
           children: [
-            CircleAvatar(child: Text(progress.name[0].toUpperCase())),
-            const SizedBox(width: 12),
+            CircleAvatar(
+              radius: isSmallScreen ? 16 : 20,
+              child: Text(
+                progress.name.isNotEmpty 
+                    ? progress.name[0].toUpperCase() 
+                    : '?',
+                style: TextStyle(fontSize: isSmallScreen ? 12 : null),
+              ),
+            ),
+            SizedBox(width: isSmallScreen ? 8 : 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(progress.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyLarge
-                          ?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
+                  Text(
+                    progress.name,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isSmallScreen ? 14 : null,
+                        ),
+                  ),
+                  SizedBox(height: isSmallScreen ? 2 : 4),
                   LinearProgressIndicator(
-                    value: progress.completionRate,
-                    minHeight: 8,
+                    value: progress.completionRate.clamp(0.0, 1.0),
+                    minHeight: isSmallScreen ? 6 : 8,
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
-            Text('${(progress.completionRate * 100).round()}%',
-                style: Theme.of(context).textTheme.bodyMedium),
+            SizedBox(width: isSmallScreen ? 8 : 12),
+            Text(
+              '${(progress.completionRate.clamp(0.0, 1.0) * 100).round()}%',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize: isSmallScreen ? 13 : null,
+              ),
+            ),
           ],
         ),
       ),
@@ -475,6 +581,7 @@ class _PerGroupStatisticsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     if (statistics == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -482,20 +589,27 @@ class _PerGroupStatisticsView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(group.name,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        LinearProgressIndicator(
-          value: statistics!.completionRate,
-          minHeight: 12,
+        Text(
+          group.name,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: isSmallScreen ? 18 : null,
+              ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: isSmallScreen ? 8 : 12),
+        LinearProgressIndicator(
+          value: statistics!.completionRate.clamp(0.0, 1.0),
+          minHeight: isSmallScreen ? 8 : 12,
+        ),
+        SizedBox(height: isSmallScreen ? 12 : 16),
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: isSmallScreen ? 8 : 12,
+          runSpacing: isSmallScreen ? 8 : 12,
           children: [
             _StatisticChip(
               label: 'Total Assignments',
@@ -516,12 +630,19 @@ class _PerGroupStatisticsView extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 20),
-        Text('Members progress',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        SizedBox(height: isSmallScreen ? 16 : 20),
+        Text(
+          'Members progress',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontSize: isSmallScreen ? 16 : null,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 4 : 8),
         if (statistics!.membersProgress.isEmpty)
-          const Text('No assignments for members yet.')
+          Text(
+            'No assignments for members yet.',
+            style: TextStyle(fontSize: isSmallScreen ? 13 : null),
+          )
         else
           ...statistics!.membersProgress
               .map((p) => _MemberProgressCard(progress: p)),

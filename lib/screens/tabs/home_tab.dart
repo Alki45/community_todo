@@ -14,6 +14,16 @@ import '../../providers/user_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/todo_item.dart';
+import '../../widgets/celebration_widget.dart';
+import '../../widgets/refresh_button.dart';
+import '../../services/storage_service.dart';
+import '../../models/group_announcement.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import '../../services/weekly_assignment_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../quran_reader_screen.dart';
 
 class HomeTab extends StatefulWidget {
@@ -213,6 +223,7 @@ class _HomeTabState extends State<HomeTab> {
     FocusScope.of(context).requestFocus(_announcementFocusNode);
   }
 
+
   void _showStoryIdeas(BuildContext context) {
     final ideas = [
       'Share a reflection from today\'s recitation.',
@@ -248,13 +259,20 @@ class _HomeTabState extends State<HomeTab> {
     final userProvider = context.watch<UserProvider>();
     final quranProvider = context.watch<QuranProvider>();
     final user = userProvider.user;
+    final colorScheme = Theme.of(context).colorScheme;
 
     if (userProvider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (user == null) {
-      return const Center(child: CircularProgressIndicator());
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     final firestore = context.read<FirestoreService>();
@@ -302,13 +320,41 @@ class _HomeTabState extends State<HomeTab> {
         ];
 
         if (groups.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: () async {
-              await userProvider.refreshUser();
-            },
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [...baseSections, const _NoGroupsCard()],
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
+            body: RefreshIndicator(
+              onRefresh: () async {
+                await userProvider.refreshUser();
+              },
+              child: ListView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.of(context).size.width > 600 ? 24 : 16,
+                  vertical: MediaQuery.of(context).size.height > 800 ? 24 : 16,
+                ),
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Home',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                      ),
+                      RefreshButton(
+                        onRefresh: () async {
+                          await userProvider.refreshUser();
+                        },
+                        tooltip: 'Refresh',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ...baseSections,
+                  const _NoGroupsCard(),
+                ],
+              ),
             ),
           );
         }
@@ -318,14 +364,38 @@ class _HomeTabState extends State<HomeTab> {
           orElse: () => groups.first,
         );
 
-        return RefreshIndicator(
-          onRefresh: () async {
-            await userProvider.refreshUser();
-          },
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              ...baseSections,
+        return Scaffold(
+          backgroundColor: colorScheme.surface,
+          body: RefreshIndicator(
+            onRefresh: () async {
+              await userProvider.refreshUser();
+            },
+            child: ListView(
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.of(context).size.width > 600 ? 24 : 16,
+                vertical: MediaQuery.of(context).size.height > 800 ? 24 : 16,
+              ),
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Home',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                    ),
+                    RefreshButton(
+                      onRefresh: () async {
+                        await userProvider.refreshUser();
+                      },
+                      tooltip: 'Refresh',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ...baseSections,
               _GroupSelectorCard(
                 groups: groups,
                 selectedGroupId: activeGroup.id,
@@ -365,8 +435,9 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ],
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 }
@@ -385,18 +456,21 @@ class _GroupSelectorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'My recitation group',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontSize: isSmallScreen ? 16 : null,
+              ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             InputDecorator(
               decoration: const InputDecoration(
                 labelText: 'Select group',
@@ -407,14 +481,18 @@ class _GroupSelectorCard extends StatelessWidget {
                 child: DropdownButton<String>(
                   value: selectedGroupId,
                   isExpanded: true,
-                  items: groups
-                      .map(
-                        (group) => DropdownMenuItem(
-                          value: group.id,
-                          child: Text(group.name),
-                        ),
-                      )
-                      .toList(),
+                      items: groups
+                          .map(
+                            (group) => DropdownMenuItem(
+                              value: group.id,
+                              child: Text(
+                                group.name,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          )
+                          .toList(),
                   onChanged: (value) {
                     if (value != null) {
                       onChanged(value);
@@ -423,16 +501,19 @@ class _GroupSelectorCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             Text(
               'Share reminders, hadith, or new assignments so everyone stays aligned.',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize: isSmallScreen ? 13 : null,
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isSmallScreen ? 12 : 16),
             Text(
               'Tip: use the Groups tab to invite members or assign new recitations, '
               'and the Statistics tab to monitor overall progress.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontSize: isSmallScreen ? 11 : null,
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
@@ -462,30 +543,35 @@ class _AnnouncementComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Share a reminder',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontSize: isSmallScreen ? 16 : null,
+              ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             TextField(
               controller: controller,
               focusNode: focusNode,
-              maxLines: 4,
-              minLines: 2,
+              maxLines: isSmallScreen ? 3 : 4,
+              minLines: isSmallScreen ? 2 : 2,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
+              style: TextStyle(fontSize: isSmallScreen ? 14 : null),
+              decoration: InputDecoration(
                 labelText: 'Announcement, reflection, or hadith',
                 alignLabelWithHint: true,
+                labelStyle: TextStyle(fontSize: isSmallScreen ? 13 : null),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             SwitchListTile.adaptive(
               value: isHadith,
               onChanged: onHadithChanged,
@@ -518,6 +604,7 @@ class _AnnouncementsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firestore = context.read<FirestoreService>();
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return StreamBuilder<List<GroupAnnouncement>>(
       stream: firestore.watchAnnouncements(group.id),
       builder: (context, snapshot) {
@@ -525,18 +612,21 @@ class _AnnouncementsSection extends StatelessWidget {
           return Card(
             elevation: 0,
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Announcements & reflections',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontSize: isSmallScreen ? 16 : null,
+                    ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: isSmallScreen ? 8 : 12),
                   Text(
                     'Error loading announcements: ${snapshot.error}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: isSmallScreen ? 13 : null,
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
@@ -552,7 +642,7 @@ class _AnnouncementsSection extends StatelessWidget {
         return Card(
           elevation: 0,
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -561,7 +651,9 @@ class _AnnouncementsSection extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'Announcements & reflections',
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontSize: isSmallScreen ? 16 : null,
+                        ),
                       ),
                     ),
                     if (isLoading)
@@ -618,10 +710,54 @@ class _AnnouncementTile extends StatelessWidget {
 
   final GroupAnnouncement announcement;
 
+  // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
+  // Enable this when Firebase Storage is properly configured
+  /*
+  Future<void> _downloadFile(BuildContext context, FileAttachment attachment) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Downloading file...')),
+      );
+
+      final response = await http.get(Uri.parse(attachment.url));
+      if (response.statusCode == 200) {
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/${attachment.fileName}');
+        await file.writeAsBytes(response.bodyBytes);
+        
+        await OpenFilex.open(file.path);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('File saved: ${attachment.fileName}')),
+          );
+        }
+      } else {
+        throw Exception('Failed to download file');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download file: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+  */
+  
+  // Placeholder function to prevent errors
+  Future<void> _downloadFile(BuildContext context, FileAttachment attachment) async {
+    // File sharing temporarily disabled
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     final createdAt = DateFormat(
       'MMM d • h:mm a',
     ).format(announcement.createdAt);
@@ -634,7 +770,7 @@ class _AnnouncementTile extends StatelessWidget {
             : colorScheme.surfaceContainerHigh,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -656,17 +792,92 @@ class _AnnouncementTile extends StatelessWidget {
                         : announcement.authorName,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                      fontSize: isSmallScreen ? 13 : null,
                     ),
                   ),
                 ),
-                Text(createdAt, style: theme.textTheme.bodySmall),
+                Text(
+                  createdAt,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: isSmallScreen ? 10 : null,
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             Text(
               announcement.message,
-              style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                height: 1.4,
+                fontSize: isSmallScreen ? 13 : null,
+              ),
             ),
+            // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
+            // Enable this when Firebase Storage is properly configured
+            /*
+            if (announcement.attachments.isNotEmpty) ...[
+              SizedBox(height: isSmallScreen ? 8 : 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: announcement.attachments.map((attachment) {
+                  return Card(
+                    elevation: 0,
+                    color: colorScheme.surfaceContainerHigh,
+                    child: InkWell(
+                      onTap: () {
+                        // Open/download file
+                        _downloadFile(context, attachment);
+                      },
+                      child: Padding(
+                        padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              attachment.isImage
+                                  ? Icons.image
+                                  : attachment.isPdf
+                                      ? Icons.picture_as_pdf
+                                      : Icons.description,
+                              size: isSmallScreen ? 20 : 24,
+                            ),
+                            SizedBox(width: isSmallScreen ? 6 : 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  attachment.fileName,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: isSmallScreen ? 11 : null,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  StorageService.formatFileSize(attachment.fileSize),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: isSmallScreen ? 9 : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(width: isSmallScreen ? 4 : 6),
+                            Icon(
+                              Icons.download,
+                              size: isSmallScreen ? 16 : 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            */
           ],
         ),
       ),
@@ -687,6 +898,8 @@ class _AssignmentsSection extends StatefulWidget {
 class _AssignmentsSectionState extends State<_AssignmentsSection> {
   bool _showAllGroups = false;
   bool _showAllAssignments = false;
+  bool _showCelebration = false;
+  final Set<String> _removingAssignments = {}; // Track assignments being removed
   static const int _maxInitialAssignments = 3;
 
   @override
@@ -728,66 +941,86 @@ class _AssignmentsSectionState extends State<_AssignmentsSection> {
           );
         }
 
-        final assignments = snapshot.data ?? [];
-        final completed = assignments
+        final allAssignments = snapshot.data ?? [];
+        // Filter out completed assignments - they should only appear in history
+        final activeAssignments = allAssignments
+            .where((assignment) => !assignment.isCompleted && !_removingAssignments.contains(assignment.id))
+            .toList();
+        final completed = allAssignments
             .where((assignment) => assignment.isCompleted)
             .length;
-        final pending = assignments.length - completed;
-        final completionRate = assignments.isEmpty
+        final pending = activeAssignments
+            .where((assignment) => assignment.status == 'pending')
+            .length;
+        final ongoing = activeAssignments
+            .where((assignment) => assignment.status == 'ongoing')
+            .length;
+        final totalActive = activeAssignments.length;
+        final totalAll = allAssignments.length;
+        final completionRate = totalAll == 0
             ? 0.0
-            : completed / assignments.length;
+            : completed / totalAll;
 
-        return Card(
-          elevation: 0,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        final isSmallScreen = MediaQuery.of(context).size.height < 700;
+        return Stack(
+          children: [
+            Card(
+              elevation: 0,
+              child: Padding(
+                padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        'My assignments${_showAllGroups ? ' (All groups)' : ' for ${widget.group.name}'}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'My assignments${_showAllGroups ? ' (All groups)' : ' for ${widget.group.name}'}',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontSize: isSmallScreen ? 16 : null,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            _showAllGroups ? Icons.filter_list : Icons.filter_list_off,
+                            size: isSmallScreen ? 20 : 24,
+                          ),
+                          tooltip: _showAllGroups ? 'Show only this group' : 'Show all groups',
+                          onPressed: () {
+                            setState(() {
+                              _showAllGroups = !_showAllGroups;
+                            });
+                          },
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: Icon(_showAllGroups ? Icons.filter_list : Icons.filter_list_off),
-                      tooltip: _showAllGroups ? 'Show only this group' : 'Show all groups',
-                      onPressed: () {
-                        setState(() {
-                          _showAllGroups = !_showAllGroups;
-                        });
-                      },
+                    SizedBox(height: isSmallScreen ? 12 : 16),
+                    LinearProgressIndicator(
+                      value: completionRate,
+                      minHeight: isSmallScreen ? 8 : 10,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value: completionRate,
-                  minHeight: 10,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                const SizedBox(height: 12),
+                    SizedBox(height: isSmallScreen ? 8 : 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _SummaryChip(
-                      label: 'Completed',
-                      value: completed,
-                      color: Theme.of(context).colorScheme.secondaryContainer,
+                      label: 'Active',
+                      value: totalActive,
+                      color: Theme.of(context).colorScheme.primaryContainer,
                     ),
                     _SummaryChip(
                       label: 'Pending',
                       value: pending,
-                      color: Theme.of(context).colorScheme.primaryContainer,
+                      color: Theme.of(context).colorScheme.tertiaryContainer,
                     ),
                     _SummaryChip(
-                      label: 'Completion',
-                      value: (completionRate * 100).round(),
-                      suffix: '%',
-                      color: Theme.of(context).colorScheme.tertiaryContainer,
+                      label: 'In Progress',
+                      value: ongoing,
+                      color: Theme.of(context).colorScheme.secondaryContainer,
                     ),
                   ],
                 ),
@@ -799,7 +1032,7 @@ class _AssignmentsSectionState extends State<_AssignmentsSection> {
                       child: CircularProgressIndicator(),
                     ),
                   )
-                else if (assignments.isEmpty)
+                else if (activeAssignments.isEmpty)
                   Card(
                     elevation: 0,
                     color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -808,16 +1041,34 @@ class _AssignmentsSectionState extends State<_AssignmentsSection> {
                       child: Row(
                         children: [
                           Icon(
-                            Icons.assignment_outlined,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            Icons.check_circle_outline,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: isSmallScreen ? 32 : 40,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Text(
-                              _showAllGroups
-                                  ? 'No assignments found across all your groups. Once an admin assigns a recitation it will appear here.'
-                                  : 'No assignments yet for ${widget.group.name}. Once the admin assigns a recitation it will appear here.',
-                              style: Theme.of(context).textTheme.bodyMedium,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'All active assignments completed! 🎉',
+                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: isSmallScreen ? 14 : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  totalAll > 0
+                                      ? 'View your completed recitations in the History tab.'
+                                      : (_showAllGroups
+                                          ? 'No assignments found across all your groups. Once an admin assigns a recitation it will appear here.'
+                                          : 'No assignments yet for ${widget.group.name}. Once the admin assigns a recitation it will appear here.'),
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontSize: isSmallScreen ? 12 : null,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -826,50 +1077,172 @@ class _AssignmentsSectionState extends State<_AssignmentsSection> {
                   )
                 else ...[
                   ...(_showAllAssignments 
-                      ? assignments 
-                      : assignments.take(_maxInitialAssignments)).map(
-                    (assignment) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: TodoItem(
-                        assignment: assignment,
-                        onMarkCompleted: assignment.isCompleted
-                            ? null
-                            : () async {
-                                await firestore.updateRecitationStatus(
+                      ? activeAssignments 
+                      : activeAssignments.take(_maxInitialAssignments)).map(
+                    (assignment) => AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child: _removingAssignments.contains(assignment.id)
+                          ? const SizedBox.shrink()
+                          : AnimatedOpacity(
+                              duration: const Duration(milliseconds: 250),
+                              opacity: _removingAssignments.contains(assignment.id) ? 0.0 : 1.0,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: TodoItem(
                                   assignment: assignment,
-                                  status: 'completed',
-                                );
-                                final notificationService = context.read<NotificationService>();
-                                await notificationService.showLocalNotification(
-                                  'Assignment completed',
-                                  'You have completed ${assignment.surah ?? 'Juz ${assignment.juzNumber}'}.',
-                                );
-                              },
-                        onMarkInProgress: assignment.status == 'ongoing'
-                            ? null
-                            : () async {
-                                await firestore.updateRecitationStatus(
-                                  assignment: assignment,
-                                  status: 'ongoing',
-                                );
-                                final notificationService = context.read<NotificationService>();
-                                await notificationService.showLocalNotification(
-                                  'Assignment in progress',
-                                  'You are working on ${assignment.surah ?? 'Juz ${assignment.juzNumber}'}.',
-                                );
-                              },
-                        onReset: assignment.status == 'pending'
-                            ? null
-                            : () async {
-                                await firestore.updateRecitationStatus(
-                                  assignment: assignment,
-                                  status: 'pending',
-                                );
-                              },
-                      ),
+                                  onMarkCompleted: () async {
+                                    // Mark as removing to trigger animation
+                                    setState(() {
+                                      _removingAssignments.add(assignment.id);
+                                    });
+                                    
+                                    // Wait for animation
+                                    await Future.delayed(const Duration(milliseconds: 300));
+                                    
+                                    // Update status in Firestore
+                                    await firestore.updateRecitationStatus(
+                                      assignment: assignment,
+                                      status: 'completed',
+                                    );
+                                    
+                                    // Remove from removing set after stream updates
+                                    if (mounted) {
+                                      setState(() {
+                                        _removingAssignments.remove(assignment.id);
+                                      });
+                                    }
+                                    
+                                    final notificationService = context.read<NotificationService>();
+                                    await notificationService.showLocalNotification(
+                                      'Assignment completed',
+                                      'You have completed ${assignment.surah ?? 'Juz ${assignment.juzNumber}'}.',
+                                    );
+                                    
+                                    // Show success snackbar with option to view in history
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Row(
+                                            children: [
+                                              const Icon(Icons.check_circle, color: Colors.white),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  '${assignment.surah ?? 'Juz ${assignment.juzNumber}'} completed!',
+                                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          backgroundColor: Theme.of(context).colorScheme.primary,
+                                          behavior: SnackBarBehavior.floating,
+                                          duration: const Duration(seconds: 3),
+                                          action: SnackBarAction(
+                                            label: 'View History',
+                                            textColor: Colors.white,
+                                            onPressed: () {
+                                              // Navigate to history tab (index 2)
+                                              try {
+                                                final tabSwitcher = context.read<ValueChanged<int>>();
+                                                tabSwitcher(2); // History tab is at index 2
+                                              } catch (_) {
+                                                // If provider not available, show message
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text('Switch to History tab to view completed recitations'),
+                                                    duration: Duration(seconds: 2),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    
+                                    // Check if all 30 Juz are completed for this week
+                                    if (assignment.weekId != null) {
+                                      final weeklyService = WeeklyAssignmentService(FirebaseFirestore.instance);
+                                      final isComplete = await weeklyService.isWeekComplete(
+                                        groupId: assignment.groupId,
+                                        weekId: assignment.weekId!,
+                                      );
+                                      
+                                      if (isComplete && mounted) {
+                                        setState(() {
+                                          _showCelebration = true;
+                                        });
+                                        
+                                        // Auto-create next week if current week is complete
+                                        try {
+                                          await weeklyService.checkAndCreateNextWeek(
+                                            groupId: assignment.groupId,
+                                            completedWeekId: assignment.weekId!,
+                                          );
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: const Row(
+                                                  children: [
+                                                    Icon(Icons.celebration, color: Colors.white),
+                                                    SizedBox(width: 12),
+                                                    Expanded(
+                                                      child: Text(
+                                                        'Week completed! New week assignments created automatically.',
+                                                        style: TextStyle(fontWeight: FontWeight.w500),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                backgroundColor: Colors.green,
+                                                behavior: SnackBarBehavior.floating,
+                                                duration: const Duration(seconds: 4),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          // Silently fail - next week might already exist
+                                        }
+                                        
+                                        // Hide celebration after 3 seconds
+                                        Future.delayed(const Duration(seconds: 3), () {
+                                          if (mounted) {
+                                            setState(() {
+                                              _showCelebration = false;
+                                            });
+                                          }
+                                        });
+                                      }
+                                    }
+                                  },
+                                  onMarkInProgress: assignment.status == 'ongoing'
+                                      ? null
+                                      : () async {
+                                          await firestore.updateRecitationStatus(
+                                            assignment: assignment,
+                                            status: 'ongoing',
+                                          );
+                                          final notificationService = context.read<NotificationService>();
+                                          await notificationService.showLocalNotification(
+                                            'Assignment in progress',
+                                            'You are working on ${assignment.surah ?? 'Juz ${assignment.juzNumber}'}.',
+                                          );
+                                        },
+                                  onReset: assignment.status == 'pending'
+                                      ? null
+                                      : () async {
+                                          await firestore.updateRecitationStatus(
+                                            assignment: assignment,
+                                            status: 'pending',
+                                          );
+                                        },
+                                ),
+                              ),
+                            ),
                     ),
                   ),
-                  if (!_showAllAssignments && assignments.length > _maxInitialAssignments)
+                  if (!_showAllAssignments && activeAssignments.length > _maxInitialAssignments)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Center(
@@ -881,12 +1254,12 @@ class _AssignmentsSectionState extends State<_AssignmentsSection> {
                           },
                           icon: const Icon(Icons.expand_more),
                           label: Text(
-                            'Show ${assignments.length - _maxInitialAssignments} more assignment${assignments.length - _maxInitialAssignments == 1 ? '' : 's'}',
+                            'Show ${activeAssignments.length - _maxInitialAssignments} more assignment${activeAssignments.length - _maxInitialAssignments == 1 ? '' : 's'}',
                           ),
                         ),
                       ),
                     )
-                  else if (_showAllAssignments && assignments.length > _maxInitialAssignments)
+                  else if (_showAllAssignments && activeAssignments.length > _maxInitialAssignments)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Center(
@@ -905,6 +1278,20 @@ class _AssignmentsSectionState extends State<_AssignmentsSection> {
               ],
             ),
           ),
+        ),
+            if (_showCelebration)
+              Positioned.fill(
+                child: CelebrationWidget(
+                  onComplete: () {
+                    if (mounted) {
+                      setState(() {
+                        _showCelebration = false;
+                      });
+                    }
+                  },
+                ),
+              ),
+          ],
         );
       },
     );
@@ -957,10 +1344,11 @@ class _NoGroupsCard extends StatelessWidget {
     } catch (_) {
       goToGroups = null;
     }
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -969,7 +1357,7 @@ class _NoGroupsCard extends StatelessWidget {
                 Icon(
                   Icons.group_add_outlined,
                   color: colorScheme.primary,
-                  size: 32,
+                  size: isSmallScreen ? 24 : 32,
                 ),
                 const SizedBox(width: 12),
                 Text(
@@ -1027,26 +1415,35 @@ class _QuranHighlightCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final trimmed = verseText.trim();
 
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.menu_book_outlined, color: colorScheme.primary),
-                const SizedBox(width: 12),
+                Icon(
+                  Icons.menu_book_outlined,
+                  color: colorScheme.primary,
+                  size: isSmallScreen ? 20 : 24,
+                ),
+                SizedBox(width: isSmallScreen ? 8 : 12),
                 Expanded(
                   child: Text(
                     'Qur\'an highlight • ${highlight.caption}',
-                    style: theme.textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontSize: isSmallScreen ? 16 : null,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             if (isLoading)
               const LinearProgressIndicator()
             else if (trimmed.isEmpty)
@@ -1060,9 +1457,10 @@ class _QuranHighlightCard extends StatelessWidget {
                 style: theme.textTheme.titleMedium?.copyWith(
                   height: 1.6,
                   fontWeight: FontWeight.w600,
+                  fontSize: isSmallScreen ? 14 : null,
                 ),
               ),
-            const SizedBox(height: 16),
+            SizedBox(height: isSmallScreen ? 12 : 16),
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -1101,10 +1499,11 @@ class _HadithStoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1113,25 +1512,41 @@ class _HadithStoryCard extends StatelessWidget {
                 Icon(Icons.auto_stories_outlined, color: colorScheme.secondary),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(story.title, style: theme.textTheme.titleMedium),
+                  child: Text(
+                    story.title,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontSize: isSmallScreen ? 16 : null,
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isSmallScreen ? 6 : 8),
             Text(
               'Narrated by ${story.narratedBy}',
               style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: isSmallScreen ? 11 : null,
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             Text(
-              '“${story.quote}”',
-              style: theme.textTheme.titleMedium?.copyWith(height: 1.5),
+              '"${story.quote}"',
+              style: theme.textTheme.titleMedium?.copyWith(
+                height: 1.5,
+                fontSize: isSmallScreen ? 14 : null,
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(story.reflection, style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 16),
+            SizedBox(height: isSmallScreen ? 8 : 12),
+            Text(
+              story.reflection,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontSize: isSmallScreen ? 13 : null,
+              ),
+            ),
+            SizedBox(height: isSmallScreen ? 12 : 16),
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -1161,6 +1576,7 @@ class _CommunityAnnouncementsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firestore = context.read<FirestoreService>();
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return StreamBuilder<List<AppAnnouncement>>(
       stream: firestore.watchCommunityAnnouncements(limit: 5),
       builder: (context, snapshot) {
@@ -1169,7 +1585,7 @@ class _CommunityAnnouncementsSection extends StatelessWidget {
         return Card(
           elevation: 0,
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1178,7 +1594,9 @@ class _CommunityAnnouncementsSection extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'Community announcements',
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontSize: isSmallScreen ? 16 : null,
+                        ),
                       ),
                     ),
                     if (isLoading)
@@ -1266,16 +1684,21 @@ class _AllAnnouncementsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firestore = context.read<FirestoreService>();
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('All Announcements'),
+            Text(
+              'All Announcements',
+              style: TextStyle(fontSize: isSmallScreen ? 16 : null),
+            ),
             Text(
               group.name,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: isSmallScreen ? 11 : null,
                     color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                   ),
             ),
@@ -1288,7 +1711,7 @@ class _AllAnnouncementsScreen extends StatelessWidget {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
                 child: Text(
                   'Error loading announcements: ${snapshot.error}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1309,25 +1732,28 @@ class _AllAnnouncementsScreen extends StatelessWidget {
           if (announcements.isEmpty) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.campaign_outlined,
-                      size: 64,
+                      size: isSmallScreen ? 48 : 64,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: isSmallScreen ? 12 : 16),
                     Text(
                       'No announcements yet',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontSize: isSmallScreen ? 16 : null,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: isSmallScreen ? 6 : 8),
                     Text(
                       'Share a quick reminder or inspiration for your group.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontSize: isSmallScreen ? 13 : null,
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                     ),
@@ -1343,7 +1769,7 @@ class _AllAnnouncementsScreen extends StatelessWidget {
               await Future.delayed(const Duration(milliseconds: 500));
             },
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
               children: [
                 ...announcements.map(
                   (announcement) => Padding(
@@ -1412,3 +1838,4 @@ class _HadithLibrary {
     return _stories[index];
   }
 }
+

@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/app_announcement.dart';
+import '../models/chat_message.dart';
 import '../models/group_announcement.dart';
 import '../models/group_model.dart';
 import '../models/group_statistics.dart';
@@ -672,6 +673,41 @@ class FirestoreService {
     }
   }
 
+  Stream<List<RecitationAssignment>> watchWeekAssignments({
+    required String groupId,
+    required String weekId,
+  }) {
+    return _recitationsRef
+        .where('group_id', isEqualTo: groupId)
+        .where('week_id', isEqualTo: weekId)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(RecitationAssignment.fromDoc)
+              .toList(growable: false),
+        );
+  }
+
+  Future<List<String>> getPastWeekIds(String groupId) async {
+    final snapshot = await _recitationsRef
+        .where('group_id', isEqualTo: groupId)
+        .where('week_id', isNotEqualTo: null)
+        .get();
+
+    final weekIds = <String>{};
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final weekId = data['week_id'] as String?;
+      if (weekId != null) {
+        weekIds.add(weekId);
+      }
+    }
+
+    // Sort week IDs descending (most recent first)
+    final sorted = weekIds.toList()..sort((a, b) => b.compareTo(a));
+    return sorted;
+  }
+
   Stream<GroupStatistics> watchGroupStatistics(Group group) {
     return watchGroupAssignments(group.id).map((assignments) {
       final completed = assignments
@@ -827,6 +863,7 @@ class FirestoreService {
     required String message,
     bool isHadith = false,
     bool pinned = false,
+    List<Map<String, dynamic>>? attachments,
   }) async {
     final collection = _groupsRef.doc(group.id).collection('announcements');
     await collection.add({
@@ -837,7 +874,38 @@ class FirestoreService {
       'created_at': FieldValue.serverTimestamp(),
       'is_hadith': isHadith,
       'pinned': pinned,
+      'attachments': attachments ?? [],
     });
+  }
+
+  /// Send a chat message to a group
+  Future<void> sendChatMessage({
+    required Group group,
+    required AppUser sender,
+    required String message,
+    List<Map<String, dynamic>>? attachments,
+  }) async {
+    final collection = _groupsRef.doc(group.id).collection('messages');
+    await collection.add({
+      'group_id': group.id,
+      'sender_uid': sender.uid,
+      'sender_name': sender.name.isEmpty ? sender.email : sender.name,
+      'message': message.trim(),
+      'created_at': FieldValue.serverTimestamp(),
+      'attachments': attachments ?? [],
+    });
+  }
+
+  /// Watch chat messages for a group (real-time updates)
+  Stream<List<ChatMessage>> watchGroupMessages(String groupId) {
+    return _groupsRef
+        .doc(groupId)
+        .collection('messages')
+        .orderBy('created_at', descending: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => ChatMessage.fromDoc(doc))
+            .toList());
   }
 
   Stream<List<AppAnnouncement>> watchCommunityAnnouncements({int limit = 10}) {

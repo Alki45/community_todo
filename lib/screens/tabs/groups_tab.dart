@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../models/group_model.dart';
 import '../../models/join_request.dart';
 import '../../models/user_model.dart';
@@ -12,6 +14,9 @@ import '../../models/recitation_model.dart';
 import '../../providers/user_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/weekly_assignment_service.dart';
+import '../../widgets/refresh_button.dart';
+import '../../screens/group_chat_screen.dart';
 
 class GroupsTab extends StatefulWidget {
   const GroupsTab({super.key});
@@ -180,6 +185,58 @@ class _GroupsTabState extends State<GroupsTab> {
       await _notifications.unsubscribeFromGroupTopic(group.id);
       if (mounted) {
         _showSnackBar('You have left ${group.name}.');
+      }
+    } catch (error) {
+      _showSnackBar(error.toString(), isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _assignWeeklyJuz({
+    required Group group,
+    required GroupMember admin,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Assign Weekly Juz'),
+        content: Text(
+          'This will assign all 30 Juz of the Quran to group members for this week. '
+          'Each member will receive an equal share of the 30 Juz. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Assign'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+    try {
+      final weeklyService = WeeklyAssignmentService(FirebaseFirestore.instance);
+      await weeklyService.assignWeeklyJuz(
+        group: group,
+        assignedBy: admin,
+      );
+      await _notifications.showLocalNotification(
+        'Weekly assignments created',
+        'All 30 Juz have been assigned to group members for this week.',
+      );
+      if (mounted) {
+        _showSnackBar('Weekly Juz assignments created successfully.');
       }
     } catch (error) {
       _showSnackBar(error.toString(), isError: true);
@@ -431,6 +488,14 @@ class _GroupsTabState extends State<GroupsTab> {
     }
   }
 
+  void _openGroupChat(Group group) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => GroupChatScreen(group: group),
+      ),
+    );
+  }
+
   void _openGroupDetail(AppUser user, Group group) {
     final userProvider = context.read<UserProvider>();
     showModalBottomSheet<void>(
@@ -442,6 +507,12 @@ class _GroupsTabState extends State<GroupsTab> {
         isActiveGroup: userProvider.activeGroupId == group.id,
         onLeave: () => _leaveGroup(user, group),
         onAssignRecitation: () => _assignRecitation(
+          group: group,
+          admin: group.members.firstWhere(
+            (element) => element.uid == group.adminUid,
+          ),
+        ),
+        onAssignWeeklyJuz: () => _assignWeeklyJuz(
           group: group,
           admin: group.members.firstWhere(
             (element) => element.uid == group.adminUid,
@@ -502,14 +573,31 @@ class _GroupsTabState extends State<GroupsTab> {
               final groups = snapshot.data ?? [];
               final isLoading =
                   snapshot.connectionState == ConnectionState.waiting;
+              final isSmallScreen = MediaQuery.of(context).size.height < 700;
 
               return ListView(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.of(context).size.width > 600 ? 24 : 16,
+                  vertical: isSmallScreen ? 16 : 24,
+                ),
                 children: [
-                  _GroupsHeader(
-                    onCreateGroup: () => _createGroup(user),
-                    onJoinGroup: () => _joinGroup(user),
-                    isProcessing: _isProcessing,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: _GroupsHeader(
+                          onCreateGroup: () => _createGroup(user),
+                          onJoinGroup: () => _joinGroup(user),
+                          isProcessing: _isProcessing,
+                        ),
+                      ),
+                      RefreshButton(
+                        onRefresh: () async {
+                          await userProvider.refreshUser();
+                        },
+                        tooltip: 'Refresh groups',
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   _MySentRequestsSection(user: user),
@@ -536,6 +624,7 @@ class _GroupsTabState extends State<GroupsTab> {
                         currentUserId: user.uid,
                         isActive: userProvider.activeGroupId == group.id,
                         onTap: () => _openGroupDetail(user, group),
+                        onChat: () => _openGroupChat(group),
                       ),
                   ],
                 ],
@@ -566,24 +655,29 @@ class _GroupsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Recitation groups',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontSize: isSmallScreen ? 16 : null,
+              ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreen ? 8 : 12),
             Text(
               'Create a group for your family, halaqah, or community. '
               'Invite members to collaborate, assign recitations, and track progress together.',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize: isSmallScreen ? 13 : null,
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isSmallScreen ? 12 : 16),
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -649,12 +743,14 @@ class GroupListTile extends StatelessWidget {
     required this.currentUserId,
     required this.onTap,
     this.isActive = false,
+    this.onChat,
   });
 
   final Group group;
   final String currentUserId;
   final VoidCallback onTap;
   final bool isActive;
+  final VoidCallback? onChat;
 
   @override
   Widget build(BuildContext context) {
@@ -680,34 +776,70 @@ class GroupListTile extends StatelessWidget {
       );
     }
 
+    final isSmallScreen = MediaQuery.of(context).size.height < 700;
     return Card(
       elevation: 0,
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 24,
-          vertical: 12,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: isSmallScreen ? 16 : 24,
+          vertical: isSmallScreen ? 8 : 12,
         ),
         leading: CircleAvatar(
-          radius: 24,
-          child: Text(group.name.isEmpty ? '?' : group.name[0].toUpperCase()),
+          radius: isSmallScreen ? 20 : 24,
+          child: Text(
+            group.name.isEmpty ? '?' : group.name[0].toUpperCase(),
+            style: TextStyle(fontSize: isSmallScreen ? 14 : null),
+          ),
         ),
-        title: Text(group.name, style: Theme.of(context).textTheme.titleMedium),
+        title: Text(
+          group.name,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontSize: isSmallScreen ? 16 : null,
+          ),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               '${group.memberCount} members • Admin: ${adminMember?.name ?? 'Unassigned'}',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(fontSize: isSmallScreen ? 12 : null),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: isSmallScreen ? 2 : 4),
             _GroupAssignmentSummary(
               groupId: group.id,
               currentUserId: currentUserId,
             ),
           ],
         ),
-        trailing: chips.isEmpty
-            ? const Icon(Icons.chevron_right)
-            : Wrap(spacing: 8, children: chips),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onChat != null)
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline),
+                tooltip: 'Open group chat',
+                onPressed: () {
+                  onChat?.call();
+                },
+                iconSize: isSmallScreen ? 20 : 24,
+              ),
+            if (chips.isEmpty)
+              Icon(
+                Icons.chevron_right,
+                size: isSmallScreen ? 20 : 24,
+              )
+            else
+              Wrap(
+                spacing: isSmallScreen ? 4 : 8,
+                runSpacing: isSmallScreen ? 4 : 8,
+                children: chips,
+              ),
+          ],
+        ),
         onTap: onTap,
       ),
     );
@@ -762,9 +894,15 @@ class _GroupAssignmentSummary extends StatelessWidget {
             ? 0
             : ((completed / assignments.length) * 100).round();
 
+        final isSmallScreen = MediaQuery.of(context).size.height < 700;
         return Text(
           'Assignments: $completed completed • $ongoing in progress • $pending pending • $completionRate% done',
-          style: theme.textTheme.bodySmall?.copyWith(color: color),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: color,
+            fontSize: isSmallScreen ? 11 : null,
+          ),
         );
       },
     );
@@ -777,6 +915,7 @@ class GroupDetailSheet extends StatelessWidget {
     required this.user,
     required this.group,
     required this.onAssignRecitation,
+    required this.onAssignWeeklyJuz,
     required this.onLeave,
     required this.onVoteForAdmin,
     required this.onSetAdmin,
@@ -790,6 +929,7 @@ class GroupDetailSheet extends StatelessWidget {
   final AppUser user;
   final Group group;
   final VoidCallback onAssignRecitation;
+  final VoidCallback onAssignWeeklyJuz;
   final VoidCallback onLeave;
   final ValueChanged<GroupMember> onVoteForAdmin;
   final ValueChanged<GroupMember> onSetAdmin;
@@ -809,14 +949,16 @@ class GroupDetailSheet extends StatelessWidget {
       expand: false,
       maxChildSize: 0.95,
       initialChildSize: 0.8,
-      builder: (context, controller) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: ListView(
-          controller: controller,
-          padding: const EdgeInsets.all(24),
+      builder: (context, controller) {
+        final isSmallScreenLocal = MediaQuery.of(context).size.height < 700;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: ListView(
+            controller: controller,
+            padding: EdgeInsets.all(isSmallScreenLocal ? 16 : 24),
           children: [
             Center(
               child: Container(
@@ -831,21 +973,34 @@ class GroupDetailSheet extends StatelessWidget {
             ),
             Text(
               group.name,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
               style: Theme.of(
                 context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+              ).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                fontSize: isSmallScreenLocal ? 20 : null,
+              ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isSmallScreenLocal ? 6 : 8),
             if (group.shareableLink != null) ...[
               Text(
                 'Shareable link: ${group.shareableLink}',
-                style: Theme.of(context).textTheme.bodyMedium,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: isSmallScreenLocal ? 13 : null,
+                ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: isSmallScreenLocal ? 6 : 8),
             ],
             Text(
               'Invite code: ${group.inviteCode}',
-              style: Theme.of(context).textTheme.bodyMedium,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize: isSmallScreenLocal ? 13 : null,
+              ),
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -903,21 +1058,36 @@ class GroupDetailSheet extends StatelessWidget {
                 label: Text('Current home group'),
                 avatar: Icon(Icons.home, size: 16),
               ),
-            const SizedBox(height: 24),
-            Text('Members', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
+            SizedBox(height: isSmallScreenLocal ? 16 : 24),
+            Text(
+              'Members',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontSize: isSmallScreenLocal ? 16 : null,
+              ),
+            ),
+            SizedBox(height: isSmallScreenLocal ? 8 : 12),
             for (final member in group.members)
               Card(
                 elevation: 0,
                 child: ListTile(
                   leading: CircleAvatar(
+                    radius: isSmallScreenLocal ? 18 : 20,
                     child: Text(
                       member.name.isEmpty ? '?' : member.name[0].toUpperCase(),
+                      style: TextStyle(fontSize: isSmallScreenLocal ? 12 : null),
                     ),
                   ),
-                  title: Text(member.name.isEmpty ? member.email : member.name),
+                  title: Text(
+                    member.name.isEmpty ? member.email : member.name,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(fontSize: isSmallScreenLocal ? 14 : null),
+                  ),
                   subtitle: Text(
                     'Joined ${DateFormat.yMMMd().format(member.joinedAt)}',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(fontSize: isSmallScreenLocal ? 12 : null),
                   ),
                   trailing: _MemberActions(
                     isAdmin: isAdmin,
@@ -931,12 +1101,19 @@ class GroupDetailSheet extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            if (isAdmin)
+            if (isAdmin) ...[
               FilledButton.icon(
+                onPressed: onAssignWeeklyJuz,
+                icon: const Icon(Icons.calendar_today),
+                label: const Text('Assign Weekly Juz (30 Juz)'),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
                 onPressed: onAssignRecitation,
                 icon: const Icon(Icons.assignment_add),
-                label: const Text('Assign recitation'),
+                label: const Text('Assign individual recitation'),
               ),
+            ],
             if (isAdmin) ...[
               const SizedBox(height: 24),
               _JoinRequestsSection(group: group, user: user),
@@ -973,7 +1150,8 @@ class GroupDetailSheet extends StatelessWidget {
               ),
           ],
         ),
-      ),
+      );
+      },
     );
   }
 }
@@ -1634,8 +1812,16 @@ class _GroupMemberSearchState extends State<GroupMemberSearch> {
                     user.name.isEmpty ? '?' : user.name[0].toUpperCase(),
                   ),
                 ),
-                title: Text(user.name.isEmpty ? user.email : user.name),
-                subtitle: Text(user.email),
+                title: Text(
+                  user.name.isEmpty ? user.email : user.name,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                subtitle: Text(
+                  user.email,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
                 trailing: FilledButton.icon(
                   onPressed: () => widget.onUserSelected(user),
                   icon: const Icon(Icons.person_add_alt),
@@ -2107,6 +2293,8 @@ class _PendingRequestCard extends StatelessWidget {
                     children: [
                       Text(
                         request.userName,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
@@ -2114,6 +2302,8 @@ class _PendingRequestCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         request.userEmail,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
@@ -2195,3 +2385,4 @@ class _PendingRequestCard extends StatelessWidget {
     );
   }
 }
+

@@ -2,6 +2,9 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "functions": {
     "source": "functions"
   },
@@ -10,7 +13,7 @@
       "android": {
         "default": {
           "projectId": "qurantodo",
-          "appId": "<REDACTED_ANDROID_APP_ID>",
+          "appId": "1:570900593412:android:3bb478acc0e6c767e7ae51",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -18,16 +21,19 @@
         "lib/firebase_options.dart": {
           "projectId": "qurantodo",
           "configurations": {
-            "android": "<REDACTED_ANDROID_APP_ID>",
-            "ios": "<REDACTED_IOS_APP_ID>",
-            "macos": "<REDACTED_MACOS_APP_ID>",
-            "web": "<REDACTED_WEB_APP_ID>"
+            "android": "1:570900593412:android:3bb478acc0e6c767e7ae51",
+            "ios": "1:570900593412:ios:904e9558d813715be7ae51",
+            "macos": "1:570900593412:ios:904e9558d813715be7ae51",
+            "web": "1:570900593412:web:b0d7c47dc283c0ebe7ae51"
           }
         }
       }
     }
   },
   "emulators": {
+    "auth": {
+      "port": 9099
+    },
     "functions": {
       "port": 5001
     },
