@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:image_picker/image_picker.dart';
+// Temporarily disabled - file/image attachments not supported
+// import 'package:http/http.dart' as http;
+// import 'dart:io';
+// import 'package:path_provider/path_provider.dart';
+// import 'package:open_filex/open_filex.dart';
+// import 'package:image_picker/image_picker.dart';
 
 import '../models/chat_message.dart';
 import '../models/group_model.dart';
@@ -13,7 +14,8 @@ import '../models/user_model.dart';
 import '../models/group_announcement.dart';
 import '../providers/user_provider.dart';
 import '../services/firestore_service.dart';
-import '../services/storage_service.dart';
+// Temporarily disabled - file/image attachments not supported
+// import '../services/storage_service.dart';
 
 class GroupChatScreen extends StatefulWidget {
   const GroupChatScreen({
@@ -31,7 +33,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final FocusNode _messageFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-  // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
+  // Temporarily disabled - file/image attachments not supported
   // final StorageService _storageService = StorageService();
   bool _isSending = false;
   bool _showEmojiPicker = false;
@@ -55,8 +57,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
-  // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
-  // Enable this when Firebase Storage is properly configured
+  // Temporarily disabled - file/image attachments not supported
   /*
   Future<void> _pickImage() async {
     try {
@@ -133,8 +134,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
   */
 
-  // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
-  // Enable this when Firebase Storage is properly configured
+  // Temporarily disabled - file/image attachments not supported
   /*
   Future<void> _pickFile() async {
     try {
@@ -187,8 +187,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
   */
 
-  // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
-  // Enable this when Firebase Storage is properly configured
+  // Temporarily disabled - file/image attachments not supported
   /*
   void _removeAttachment(FileAttachment attachment) {
     setState(() {
@@ -199,7 +198,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
-    // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
+    // Temporarily disabled - file/image attachments not supported
     // if (message.isEmpty && _attachments.isEmpty) {
     if (message.isEmpty) {
       return;
@@ -219,13 +218,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         group: widget.group,
         sender: user,
         message: message,
-        // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
+        // Temporarily disabled - file/image attachments not supported
         // attachments: _attachments.map((a) => a.toMap()).toList(),
         attachments: [],
       );
       _messageController.clear();
       setState(() {
-        // TODO: File sharing temporarily disabled
         // _attachments.clear();
         _showEmojiPicker = false;
       });
@@ -248,8 +246,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
-  // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
-  // Enable this when Firebase Storage is properly configured
+  // Temporarily disabled - file/image attachments not supported
   /*
   Future<void> _downloadFile(FileAttachment attachment) async {
     try {
@@ -280,9 +277,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
   */
   
-  // Placeholder function to prevent errors when attachments are displayed
+  // Placeholder function to prevent errors
   Future<void> _downloadFile(FileAttachment attachment) async {
-    // File sharing temporarily disabled
+    // Temporarily disabled - file/image attachments not supported
   }
 
   @override
@@ -405,8 +402,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
-                // Enable this when Firebase Storage is properly configured
+                // Temporarily disabled - file/image attachments not supported
                 /*
                 if (_attachments.isNotEmpty)
                   Container(
@@ -439,8 +435,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
                   child: Row(
                     children: [
-                      // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
-                      // Enable this when Firebase Storage is properly configured
+                      // Temporarily disabled - file/image attachments not supported
                       /*
                       IconButton(
                         icon: const Icon(Icons.image),
@@ -572,8 +567,7 @@ class _ChatMessageBubble extends StatelessWidget {
                             fontSize: isSmallScreen ? 13 : null,
                           ),
                     ),
-                  // TODO: File sharing temporarily disabled - Firebase/Firestore not supporting file storage for now
-                  // Enable this when Firebase Storage is properly configured
+                  // Temporarily disabled - file/image attachments not supported
                   /*
                   if (message.attachments.isNotEmpty) ...[
                     if (message.message.isNotEmpty) const SizedBox(height: 8),
